@@ -101,10 +101,12 @@
       return "";
     },
     // cls "hot" marks the tile that needs action (pink in Dawn).
-    tile(label, value, sub, unit, cls) {
-      return `<div class="tile${cls ? " " + cls : ""}"><span class="label">${esc(label)}</span>
+    // link: optional VG.ui.link(...) attributes; the card then opens that list.
+    tile(label, value, sub, unit, cls, link) {
+      const tag = link ? "a" : "div";
+      return `<${tag} class="tile${link ? " ftile" : ""}${cls ? " " + cls : ""}"${link ? " " + link + ' data-tip="Show these KPIs"' : ""}><span class="label">${esc(label)}</span>
         <span class="value num">${value}${unit ? `<small>${esc(unit)}</small>` : ""}</span>
-        ${sub ? `<span class="sub">${sub}</span>` : ""}</div>`;
+        ${sub ? `<span class="sub">${sub}</span>` : ""}</${tag}>`;
     },
     // Ladder position as dots; tooltip names the stage.
     dots(step, position) {

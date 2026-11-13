@@ -97,9 +97,9 @@
         ${kind === "past" ? VG.ui.tile("KPIs with a target", T.kpi.total - T.kpi.none, "recorded yearly figures") : `<div class="tile ring-tile">${C().ring(T.units ? T.reported / T.units : 0, 54)}
           <div style="display:flex;flex-direction:column;gap:2px"><span class="label">Intervention reports saved</span><b class="num">${T.reported} of ${T.units}</b>
           <span class="sub">${submitted} of ${a.offices.length} offices submitted${kind === "ytd" ? " · " + L().qLabel(q) : ""}</span></div></div>`}
-        ${VG.ui.tile("KPIs achieved or on track", `${T.kpi.achieved + T.kpi.ontrack}<small>of ${withTarget}</small>`, "with something due this year")}
-        ${VG.ui.tile("KPIs behind", T.kpi.behind, T.kpi.behind ? "Needs attention" : "", "", T.kpi.behind ? "hot" : "")}
-        ${VG.ui.tile("Milestones overdue", T.msOverdue, T.msOverdue ? VG.ui.chip("Follow up", "crit") : "None")}
+        ${VG.ui.tile("KPIs achieved or on track", `${T.kpi.achieved + T.kpi.ontrack}<small>of ${withTarget}</small>`, "with something due this year", "", "", VG.ui.link("kpis", { q: p, show: "all" }))}
+        ${VG.ui.tile("KPIs behind", T.kpi.behind, T.kpi.behind ? "Needs attention" : "", "", T.kpi.behind ? "hot" : "", VG.ui.link("kpis", { q: p, show: "behind" }))}
+        ${VG.ui.tile("Milestones overdue", T.msOverdue, T.msOverdue ? VG.ui.chip("Follow up", "crit") : "None", "", "", VG.ui.link("kpis", { q: p, show: "behind" }))}
         ${VG.ui.tile("Funds spent", T.sanctioned ? VG.ui.pct(T.spent, T.sanctioned) : 0, `${VG.ui.lakh(T.spent)} of ${VG.ui.lakh(T.sanctioned)}`, "%")}
       </div>
 
@@ -200,8 +200,12 @@
       const y = VG.config.targetYears.find((k) => k > year && L().num((r.kpi.targets || {})[k]) > 0);
       return y ? `<span class="small first-t">First target<b>${L().fyKeyLabel(y)}: ${esc(r.kpi.targets[y])}</b></span>` : `<span class="small muted">No target set</span>`;
     };
-    const fig = (r) => r.status === "none" ? firstTarget(r) : r.milestones
-      ? `<span class="small">${r.milestones.filter((m) => m.state === "done").length} of ${r.milestones.length} milestones</span>`
+    // Milestone tasks: how many done, and the next one with its due date.
+    const msFig = (r) => {
+      const next = r.milestones.find((m) => m.state !== "done");
+      return `<span class="small first-t">${r.milestones.filter((m) => m.state === "done").length} of ${r.milestones.length} milestones done${next ? `<b>Next: ${esc(next.label)} · ${esc(next.due)}</b>` : ""}</span>`;
+    };
+    const fig = (r) => r.status === "none" ? firstTarget(r) : r.milestones ? msFig(r)
       : `<b>${VG.ui.fmtNum(r.actual) || "–"}</b> <span class="muted">/ ${r.target != null ? VG.ui.fmtNum(r.target) : esc(r.targetText || "–")}</span>`;
     // Admin can open the action step's targets from any row.
     const admin = VG.auth.user().role === "admin";
@@ -383,8 +387,8 @@
       ${periodNote(kind, q)}
       <div class="tiles five">
         ${VG.ui.tile("Reported", `${o.reported}<small>of ${o.units}</small>`, o.submitted ? VG.ui.chip("Submitted", "good") : VG.ui.chip("Not submitted", "muted"))}
-        ${VG.ui.tile("KPIs achieved or on track", `${o.kpi.achieved + o.kpi.ontrack}<small>of ${o.kpi.total - o.kpi.none}</small>`)}
-        ${VG.ui.tile("KPIs behind", o.kpi.behind, "", "", o.kpi.behind ? "hot" : "")}
+        ${VG.ui.tile("KPIs achieved or on track", `${o.kpi.achieved + o.kpi.ontrack}<small>of ${o.kpi.total - o.kpi.none}</small>`, "", "", "", VG.ui.link("kpis", { q: p, office, show: "all" }))}
+        ${VG.ui.tile("KPIs behind", o.kpi.behind, "", "", o.kpi.behind ? "hot" : "", VG.ui.link("kpis", { q: p, office, show: "behind" }))}
         ${VG.ui.tile("Held up", o.held, o.msOverdue ? VG.ui.chip(o.msOverdue + " milestones overdue", "crit") : "")}
         ${VG.ui.tile("Funds spent", o.sanctioned ? VG.ui.pct(o.spent, o.sanctioned) : 0, `${VG.ui.lakh(o.spent)} of ${VG.ui.lakh(o.sanctioned)}`, "%")}
       </div>
