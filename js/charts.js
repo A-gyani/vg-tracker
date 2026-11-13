@@ -107,6 +107,52 @@
       </svg>`;
     },
 
+    // One KPI over the years: navy bars = achieved, pink dotted line = target, shaded column = the chosen
+    // year with one thin bar per quarter. k: KPI; quarterVals: [Q1..Q4] figures for `year` (null where none).
+    kpiChart(k, year, quarterVals) {
+      const YEARS = VG.config.targetYears.filter((y) => y >= "2023");
+      const W = 520, H = 200, pl = 40, pr = 10, pt = 16, pb = 32;
+      const tv = YEARS.map((y) => VG.logic.num((k.targets || {})[y]));
+      const av = YEARS.map((y) => (k.actuals || {})[y] ?? null);
+      const qv = (quarterVals || []).map((v) => (v == null ? null : Number(v)));
+      const lastQ = qv.filter((v) => v != null).slice(-1)[0];
+      const max = niceMax(Math.max(1, ...tv.filter((v) => v != null), ...av.filter((v) => v != null), ...qv.filter((v) => v != null)) * 1.08);
+      const cw = (W - pl - pr) / YEARS.length;
+      const y = (v) => pt + (H - pt - pb) * (1 - v / max);
+      const cx = (i) => pl + cw * i + cw / 2;
+      const cur = YEARS.indexOf(year);
+      const f = (v) => VG.ui.fmtNum(Math.round(v * 100) / 100);
+      let s = `<svg viewBox="0 0 ${W} ${H}" class="kchart" role="img" aria-label="${esc(k.text)}: achieved and target by year">`;
+      [0, max / 2, max].forEach((g) => { s += `<line x1="${pl}" x2="${W - pr}" y1="${y(g)}" y2="${y(g)}" class="g"/><text x="${pl - 6}" y="${y(g) + 4}" text-anchor="end" class="ax">${f(g)}</text>`; });
+      if (cur >= 0) s += `<rect x="${pl + cw * cur}" y="${pt - 8}" width="${cw}" height="${H - pt - pb + 8}" class="now" rx="6"/>`;
+      YEARS.forEach((yr, i) => {
+        if (i !== cur && av[i] != null) s += `<rect x="${cx(i) - cw * 0.26}" y="${y(av[i])}" width="${cw * 0.52}" height="${Math.max(1, y(0) - y(av[i]))}" rx="4" class="a"><title>Achieved ${VG.logic.fyKeyLabel(yr)}: ${f(av[i])}</title></rect>
+          <text x="${cx(i)}" y="${y(av[i]) - 5}" text-anchor="middle" class="bv">${f(av[i])}</text>`;
+        s += `<text x="${cx(i)}" y="${H - 10}" text-anchor="middle" class="ax${i === cur ? " b" : ""}">${VG.logic.fyKeyLabel(yr)}</text>`;
+      });
+      if (cur >= 0) {
+        if (qv.some((v) => v != null)) {
+          qv.forEach((v, j) => {
+            if (v == null) return;
+            const w = cw * 0.17, x = pl + cw * cur + cw * 0.1 + j * (w + cw * 0.033);
+            s += `<rect x="${x}" y="${y(v)}" width="${w}" height="${Math.max(1, y(0) - y(v))}" rx="3" class="a" opacity="${0.4 + j * 0.2}"><title>Q${j + 1}: ${f(v)}</title></rect>`;
+          });
+          s += `<text x="${cx(cur)}" y="${y(lastQ) - 5}" text-anchor="middle" class="bv">${f(lastQ)}</text>`;
+        } else if (av[cur] != null) {
+          s += `<rect x="${cx(cur) - cw * 0.26}" y="${y(av[cur])}" width="${cw * 0.52}" height="${Math.max(1, y(0) - y(av[cur]))}" rx="4" class="a"><title>Achieved: ${f(av[cur])}</title></rect>`;
+        }
+      }
+      const pts = YEARS.map((yr, i) => (tv[i] == null ? null : [cx(i), y(tv[i]), yr, tv[i]])).filter(Boolean);
+      if (pts.length > 1) s += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" class="t"/>`;
+      pts.forEach((p) => { s += `<circle cx="${p[0]}" cy="${p[1]}" r="4.5" class="tp"><title>Target ${VG.logic.fyKeyLabel(p[2])}: ${f(p[3])}</title></circle>`; });
+      return s + `</svg>`;
+    },
+    kpiChartLegend() {
+      return `<div class="legend"><span><span class="swatch" style="background:var(--v-main, var(--accent))"></span>Achieved</span>
+        <span><span class="swatch" style="background:var(--v-gold, var(--serious))"></span>Target</span>
+        <span><span class="swatch" style="background:var(--accent-soft)"></span>This year, quarter by quarter</span></div>`;
+    },
+
     stageColor(i, len) {
       // ordinal blue ramp, lightest step still visible on the surface
       const k = len <= 1 ? 9 : Math.round(1 + (i * 8) / (len - 1));

@@ -1,4 +1,4 @@
-// Screens used by more than one role: sign-in and step detail.
+// Screens used by more than one role: sign-in and one intervention.
 (function () {
   const VG = window.VG;
   const { esc } = VG.ui;
@@ -10,7 +10,7 @@
   const TILES = () => [
     ...VG.config.offices.map((o) => ({ id: o.id, title: o.short, sub: o.name, role: "officer", office: o.id })),
     { id: "SECRETARY", title: "Secretary", sub: "Department view of all five offices", role: "viewer" },
-    { id: "ADMIN", title: "Admin", sub: "Steps, users, schemes and submissions", role: "admin" },
+    { id: "ADMIN", title: "Admin", sub: "Interventions, users, schemes and submissions", role: "admin" },
   ];
 
   VG.views.login = async (el) => {
@@ -45,7 +45,7 @@
         <div id="signpane" hidden></div>
         ${local ? `<details class="testmode">
           <summary>Test mode · sample data</summary>
-          <p class="muted small">Sample data fills April to last month with made-up reports so the dashboards can be tried. The current month stays empty for you to fill.${sample ? " Sample data is loaded." : ""}</p>
+          <p class="muted small">Sample data fills the earlier quarters of this year with made-up reports so the dashboards can be tried. The current quarter stays empty for you to fill.${sample ? " Sample data is loaded." : ""}</p>
           <div class="actions">${sample ? "" : '<button type="button" id="sample">Load sample data</button>'}
             <button type="button" class="secondary" id="reset">Clear all data</button></div>
         </details>` : ""}
@@ -104,81 +104,76 @@
     };
   };
 
-  // 6. Step detail
-  VG.views.stepDetail = async (el, params) => {
+  // 6. One intervention: progress graph for each KPI, milestones, and the quarterly reports.
+  //    params: { no } (intervention number) or { id } (a step id, from older links); { q } quarter.
+  VG.views.ivDetail = async (el, params) => {
     const user = VG.auth.user();
-    const step = await VG.store.getStep(params.id);
-    if (!step) throw new Error("Step not found. Go back and choose a step.");
-    if (user.role === "officer" && step.office !== user.office) throw new Error("This step belongs to another office.");
-
-    const [reports, quarterly, schemes] = await Promise.all([VG.store.allReports(), VG.store.allQuarterly(), VG.store.listSchemes()]);
-    const months = VG.logic.months();
-    const now = VG.logic.latestMonthWithData(reports);
-    const eff = VG.logic.effective(reports, step.id, now);
-    const ladder = VG.logic.ladder(step);
-    const notMoved = VG.logic.monthsNotMoved(reports, step.id, now);
-    const held = eff && VG.logic.isHeldUp(eff);
-    const stageNo = eff ? ladder.indexOf(eff.position) : -1;
+    const L = VG.logic;
+    const [steps, reports, schemes] = await Promise.all([VG.store.listSteps(), VG.store.allReports(), VG.store.listSchemes()]);
+    const no = params.no || (steps.find((s) => s.id === params.id) || {}).ivNo;
+    let units = L.ivUnits(steps, no);
+    if (user.role === "officer") units = units.filter((u) => u.office === user.office);
+    if (!units.length) throw new Error("Intervention not found. Go back and choose one.");
+    const q = params.q || L.latestQuarterWithData(reports);
+    const year = L.qYearKey(q);
+    const first = units[0];
+    const rows = units.flatMap((u) => L.kpiRows(u.kpis, reports, q));
+    const num = rows.filter((r) => !r.milestones);
+    const ms = rows.filter((r) => r.milestones);
+    const c = L.count(rows);
+    const nextMs = ms.flatMap((r) => r.milestones.filter((m) => m.state !== "done")).sort((a, b) => (a.due > b.due ? 1 : -1))[0];
+    const offices = [...new Set(units.map((u) => u.office))];
+    const officer = user.role === "officer";
+    const back = officer ? VG.ui.link("my", { q }) : offices.length === 1 ? VG.ui.link("office", { id: offices[0], q }) : VG.ui.link("overview", { q });
+    const backLabel = officer ? "My interventions" : offices.length === 1 ? VG.ui.officeShort(offices[0]) : "Dashboard";
+    const end = L.qEndMonth(q);
     const dash = '<span class="muted">–</span>';
 
-    const asc = months.slice().reverse();
-    const points = asc.map((m) => {
-      const r = VG.logic.report(reports, step.id, m);
-      const i = r ? ladder.indexOf(r.position) : -1;
-      return { label: VG.ui.monthShort(m), index: i >= 0 ? i : null, tip: r ? `${VG.ui.month(m)}: ${r.position}` : "" };
-    });
+    const editLink = (r) => user.role === "admin" ? ` · <a ${VG.ui.link("step-edit", { id: r.step.id })}>Edit targets</a>` : "";
+    const card = (r) => {
+      const qv = L.quarterValues(reports, r.item, q).map((v, j) => (j < Number(q.slice(-1)) ? v : null));
+      return `<div class="kcard"><div class="meta"><h3>${esc(r.kpi.text)}</h3>${VG.ui.kpiChip(r.status)}</div>
+        ${VG.ui.kpiTags(r.kpi)}${offices.length > 1 ? `<span class="office-line">${VG.ui.swatch(r.unit.office)}${esc(VG.ui.officeShort(r.unit.office))}</span>` : ""}
+        ${VG.charts.kpiChart(r.kpi, year, qv)}
+        <div class="meta"><span class="muted">This year: <b>${r.actual != null ? VG.ui.fmtNum(r.actual) : "–"}</b> of ${esc(r.targetText || "–")} by end of Q${q.slice(-1)}</span>
+          <span class="muted">Target 29-30: <b>${esc((r.kpi.targets || {})["2030"] || "–")}</b>${editLink(r)}</span></div></div>`;
+    };
+    const msCard = (r) => `<div class="kcard"><div class="meta"><h3>${esc(r.kpi.text)}</h3>${VG.ui.kpiChip(r.status === "none" ? "none" : r.status)}</div>
+      ${VG.ui.kpiTags(r.kpi)}${user.role === "admin" ? `<a class="small" ${VG.ui.link("step-edit", { id: r.step.id })}>Edit targets</a>` : ""}<ul class="mlist">${r.milestones.map((m) => `<li class="${m.state}"><span>${m.state === "done" ? "✓ " : ""}${esc(m.label)}</span>
+        <b>${m.state === "done" ? "Done " + esc(L.qShort(m.doneIn)) : "Due " + esc(m.due) + (m.state === "overdue" ? " · overdue" : "")}</b></li>`).join("")}</ul></div>`;
 
-    const rows = months.map((m) => {
-      const r = VG.logic.report(reports, step.id, m);
-      return r ? `<tr><td class="nw">${VG.ui.month(m)}</td><td><span class="pos">${VG.ui.dots(step, r.position)}<span>${esc(r.position)}</span></span></td>
-        <td>${VG.logic.isHeldUp(r) ? VG.ui.chip(r.heldUp, "warn") : dash}</td>
-        <td class="nw">${r.nextBy ? VG.ui.month(r.nextBy) : dash}</td><td>${VG.ui.movedChip(VG.logic.moved(reports, step.id, m))}</td></tr>`
-        : `<tr class="pending"><td class="nw">${VG.ui.month(m)}</td><td colspan="4" class="small muted">Not reported</td></tr>`;
-    }).join("");
+    const qrows = L.quarters().slice().reverse().flatMap((p) => units.map((u) => ({ p, u, r: L.report(reports, u.id, p) })))
+      .filter((x) => x.r).reverse();
 
-    const quarters = [...new Set(asc.map((m) => VG.logic.quarter(m)))];
-    const fin = quarters.map((q) => ({ q, r: quarterly[q + "|" + step.id] })).filter((x) => x.r);
-    const lastFin = fin.length ? fin[fin.length - 1].r : null;
-    const sc = lastFin ? schemes.find((s) => s.id === lastFin.schemeId) : null;
-
-    const officer = user.role === "officer";
-    const back = officer ? VG.ui.link("my") : VG.ui.link("office", { id: step.office });
-    const backLabel = officer ? "My steps" : VG.ui.officeShort(step.office);
     el.innerHTML = `<div class="page">
       <a class="back" ${back}>${esc(backLabel)}</a>
-      <div class="head"><div class="ohead">${VG.logos.mark(step.office, 56)}<div>
-        <span class="eyebrow">${esc(VG.ui.office(step.office))} · Intervention ${esc(step.ivNo)} · ${esc(step.ivCode)}</span>
-        <span class="step-pill">${esc(step.id)}</span>
-        <h1 class="step-title">${esc(step.title)}</h1>
-      </div></div></div>
+      <div class="head"><div class="ohead">${VG.logos.mark(offices.length === 1 ? offices[0] : "SECRETARY", 56)}<div>
+        <span class="eyebrow">${esc(offices.map((o) => VG.ui.office(o)).join(" · "))} · Intervention ${first.ivNo} · ${esc(first.ivCode)}</span>
+        <h1 class="step-title">${esc(first.ivDesc)}</h1></div></div>
+        ${VG.ui.quarterOptions(q)}</div>
 
-      <div class="tiles">
-        ${VG.ui.tile("Current stage", eff ? esc(eff.position) : "Not reported", stageNo >= 0 ? `Stage ${stageNo + 1} of ${ladder.length}` : "", "", "tile-text")}
-        ${VG.ui.tile("Months without change", notMoved, notMoved >= 3 ? "Needs attention" : "", "", notMoved >= 3 ? "hot" : "")}
-        ${VG.ui.tile("Held up with", held ? esc(eff.heldUp) : "None", "", "", "tile-text")}
-        ${VG.ui.tile("Next stage expected by", eff && eff.nextBy ? VG.ui.month(eff.nextBy) : "–",
-          VG.logic.isOverdue(step, eff, now) ? VG.ui.chip("Overdue", "crit") : "", "", "tile-text")}
+      <div class="tiles five">
+        ${VG.ui.tile("KPIs", rows.length, `${num.length} number${num.length === 1 ? "" : "s"}${ms.length ? `, ${ms.length} milestone task${ms.length === 1 ? "" : "s"}` : ""}`)}
+        ${VG.ui.tile("Achieved", c.achieved, "for " + L.qFy(q))}
+        ${VG.ui.tile("On track", c.ontrack, "in step with the year")}
+        ${VG.ui.tile("Behind", c.behind, c.behind ? "Needs attention" : "", "", c.behind ? "hot" : "")}
+        ${VG.ui.tile("Next milestone", nextMs ? esc(nextMs.due) : "–", nextMs ? esc(nextMs.label) : (ms.length ? "All done" : "None"), "", "tile-text")}
       </div>
 
-      <div class="card"><div class="card-head"><h2>KPIs · target and actual</h2><span class="muted small">Actual as of ${VG.ui.month(now)} for ${VG.logic.fyLabel(now)}; highlighted column is this year's target</span></div>
-        ${VG.ui.kpiTable(step, VG.logic.kpiRows(step, reports, now), now)}</div>
-      <div class="card"><div class="card-head"><h2>Stage by month</h2><span class="muted small">${step.type === "new" ? "New scheme ladder" : "Ongoing ladder"}</span></div>
-        ${points.some((p) => p.index != null) ? `<div class="table-wrap">${VG.charts.stepLine(points, ladder)}</div>` : '<p class="muted">No reports yet.</p>'}
-      </div>
+      ${num.length ? `<div class="card"><div class="card-head"><h2>Progress by KPI · achieved vs target</h2>${VG.charts.kpiChartLegend()}</div>
+        <div class="kgrid">${num.map(card).join("")}</div></div>` : ""}
+      ${ms.length ? `<div class="card"><div class="card-head"><h2>Milestone tasks</h2></div><div class="kgrid">${ms.map(msCard).join("")}</div></div>` : ""}
 
-      <div class="grid">
-        <div class="card flush"><div class="card-head"><h2>Monthly reports</h2></div><div class="table-wrap">
-          <table class="mreports"><thead><tr><th>Month</th><th>Position</th><th>Held up with</th><th>Next stage by</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-        <div class="card"><div class="card-head"><h2>Finance</h2><span class="muted small">₹ lakh</span></div>
-          ${fin.length ? `${sc ? `<div class="fin-scheme"><b>${esc(sc.name)}</b><span class="muted small">Budget head ${esc(sc.budgetHead)}</span></div>` : ""}
-            <div class="table-wrap"><table class="fin"><thead><tr><th>Quarter</th><th class="num">Sanctioned</th><th class="num">Spent</th><th class="num">%</th></tr></thead><tbody>
-            ${fin.map((x) => { const s = Number(x.r.sanctioned) || 0, p = Number(x.r.spent) || 0;
-              return `<tr><td class="nw">${esc(x.q)}</td><td class="num">${VG.ui.lakh(s)}</td><td class="num">${VG.ui.lakh(p)}</td><td class="num"><b>${VG.ui.pct(p, s)}%</b></td></tr>`; }).join("")}
-            </tbody></table></div>`
-            : '<p class="muted">None entered.</p>'}
-        </div>
-      </div>
-
+      <div class="card flush"><div class="card-head"><h2>Quarterly reports</h2><span class="muted small">Held up with, and finance (₹ lakh)</span></div>
+        <div class="table-wrap"><table class="mreports"><thead><tr><th>Quarter</th>${offices.length > 1 ? "<th>Office</th>" : ""}<th>Held up with</th><th>Expected to move by</th><th>Scheme</th><th class="num">Sanctioned</th><th class="num">Spent</th></tr></thead><tbody>
+        ${qrows.map((x) => { const sc = schemes.find((s) => s.id === x.r.schemeId);
+          return `<tr><td class="nw">${esc(L.qLabel(x.p))}</td>${offices.length > 1 ? `<td>${esc(VG.ui.officeShort(x.u.office))}</td>` : ""}
+          <td>${L.isHeldUp(x.r) ? VG.ui.chip(x.r.heldUp, "warn") : dash}</td><td class="nw">${x.r.moveBy ? VG.ui.month(x.r.moveBy) : dash}</td>
+          <td class="small">${sc ? esc(sc.name) : dash}</td><td class="num">${x.r.sanctioned !== "" && x.r.sanctioned != null ? VG.ui.lakh(x.r.sanctioned) : dash}</td>
+          <td class="num">${x.r.spent !== "" && x.r.spent != null ? VG.ui.lakh(x.r.spent) : dash}</td></tr>`; }).join("")
+          || `<tr><td colspan="7" class="muted">No quarterly reports yet.</td></tr>`}
+        </tbody></table></div></div>
     </div>`;
+    el.querySelector("#q").onchange = (e) => VG.app.go("iv", { no, q: e.target.value });
   };
 })();

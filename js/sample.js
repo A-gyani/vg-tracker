@@ -1,5 +1,5 @@
 // Test mode only: generates clearly marked sample records so the dashboards have something to show.
-// Fills every reportable month before the current one; the current month is left for live entry.
+// Fills every reportable quarter before the current one; the current quarter is left for live entry.
 (function () {
   const VG = window.VG;
 
@@ -27,66 +27,64 @@
   VG.sample = {
     async generate(actor) {
       const r = rng(2047);
-      const steps = (await VG.store.listSteps()).filter((s) => s.active !== false);
-      const months = VG.logic.months().slice(1).reverse(); // oldest first, without the current month
-      const reports = {}, quarterly = {}, submissions = {};
+      const L = VG.logic;
+      const units = L.units(await VG.store.listSteps());
+      const quarters = L.quarters().slice(1).reverse(); // oldest first, without the current quarter
+      const reports = {}, submissions = {};
       const schemes = [];
       Object.entries(SCHEMES).forEach(([office, list]) => list.forEach(([name, head], i) =>
         schemes.push({ id: `sample-${office}-${i}`, name, budgetHead: head, office, active: true })));
 
-      steps.forEach((s) => {
-        const ladder = VG.logic.ladder(s);
-        let idx = Math.floor(r() * (s.type === "new" ? 3 : 2));
-        let held = "Not held up";
-        let nextBy = VG.logic.addMonths(months[0], 2);
+      units.forEach((u) => {
         // each KPI gets its own pace; some run ahead, some fall behind, a few are never reported
         const pace = {};
-        (s.kpis || []).forEach((k) => { pace[k.id] = r() < 0.08 ? null : 0.5 + r() * 1.5; });
-        months.forEach((m, mi) => {
-          if (mi > 0) {
-            const stuckOdds = held !== "Not held up" ? 0.75 : 0.5;
-            if (r() > stuckOdds && idx < ladder.length - 1) {
-              idx++;
-              nextBy = VG.logic.addMonths(m, 1 + Math.floor(r() * 3));
-            }
-            if (held !== "Not held up" && r() < 0.35) held = "Not held up";
-            else if (held === "Not held up" && r() < 0.18) held = HELD[Math.floor(r() * HELD.length)];
-          }
-          if (idx === ladder.length - 1) { held = "Not held up"; }
+        u.kpis.forEach((it) => { pace[it.key] = r() < 0.08 ? null : 0.55 + r() * 1.3; });
+        let held = "Not held up";
+        const own = schemes.filter((x) => x.office === u.office);
+        const sc = own.length && r() < 0.7 ? own[Math.floor(r() * own.length)] : null;
+        const sanctioned = sc ? Math.round((20 + r() * 780) / 5) * 5 : "";
+        let used = 0;
+        const done = {};
+        quarters.forEach((q) => {
+          const year = L.qYearKey(q);
           const actuals = {};
-          (s.kpis || []).forEach((k) => {
-            const year = VG.logic.fyYear(m);
-            const target = VG.logic.num((k.targets || {})[year]);
-            if (!target || pace[k.id] == null || VG.logic.isMilestone(k)) return;
-            const share = Math.min(pace[k.id] * VG.logic.fyElapsed(m), 1.15);
-            // running totals start from last year's figure; yearly KPIs start from 0
-            const prev = k.basis === "cumulative" ? Math.min(target, VG.logic.num((k.targets || {})[String(Number(year) - 1)]) || 0) : 0;
+          u.kpis.forEach((it) => {
+            const k = it.k;
+            if (L.isMilestone(k)) {
+              (k.milestones || []).forEach((m) => {
+                const dueQ = /Q\d$/.test(m.due) ? m.due : m.due + " Q4";
+                if (dueQ <= q && r() < 0.55) (done[it.key] = done[it.key] || []).includes(m.label) || done[it.key].push(m.label);
+              });
+              return;
+            }
+            const target = L.num((k.targets || {})[year]);
+            if (!target || pace[it.key] == null) return;
+            const share = Math.min(pace[it.key] * L.qElapsed(q), 1.15);
+            // running totals start from last year's target; yearly counts of things that already exist
+            // (centres, schools: last year's figure is most of this year's target) start from last year's figure
+            const lastYear = String(Number(year) - 1);
+            const lastActual = Number((k.actuals || {})[lastYear]);
+            const prev = k.basis === "cumulative" ? Math.min(target, L.num((k.targets || {})[lastYear]) || 0)
+              : lastActual >= target * 0.6 ? Math.min(target, lastActual) : 0;
             const v = prev + (target - prev) * share;
-            actuals[k.id] = k.unit === "crore" ? Math.round(v * 100) / 100 : Math.round(v);
+            actuals[it.key] = k.unit === "crore" ? Math.round(v * 100) / 100 : Math.round(v);
           });
-          reports[m + "|" + s.id] = { position: ladder[idx], heldUp: held, nextBy: idx === ladder.length - 1 ? "" : nextBy, actuals, by: "sample", at: new Date().toISOString() };
+          if (held !== "Not held up" && r() < 0.4) held = "Not held up";
+          else if (held === "Not held up" && r() < 0.2) held = HELD[Math.floor(r() * HELD.length)];
+          used = Math.min(1, used + 0.15 + r() * 0.3);
+          reports[q + "|" + u.id] = { actuals, done: JSON.parse(JSON.stringify(done)), heldUp: held,
+            moveBy: held !== "Not held up" ? L.addMonths(L.qEndMonth(q), 1 + Math.floor(r() * 3)) : "",
+            schemeId: sc ? sc.id : "", sanctioned, spent: sc ? Math.round(sanctioned * used) : "", by: "sample", at: new Date().toISOString() };
         });
-
-        const own = schemes.filter((x) => x.office === s.office);
-        if (own.length && r() < 0.65) {
-          const sc = own[Math.floor(r() * own.length)];
-          const sanctioned = Math.round((20 + r() * 780) / 5) * 5;
-          const quarters = [...new Set(months.map((m) => VG.logic.quarter(m)))];
-          let used = 0;
-          quarters.forEach((q) => {
-            used = Math.min(1, used + 0.08 + r() * 0.22);
-            quarterly[q + "|" + s.id] = { schemeId: sc.id, sanctioned, spent: Math.round(sanctioned * used), by: "sample", at: new Date().toISOString() };
-          });
-        }
       });
 
-      months.forEach((m, mi) => VG.config.offices.forEach((o) => {
-        const last = mi === months.length - 1;
+      quarters.forEach((q, i) => VG.config.offices.forEach((o) => {
+        const last = i === quarters.length - 1;
         if (last && (o.id === "ARCH" || o.id === "GSA")) return; // left unsubmitted to show the difference
-        submissions[m + "|" + o.id] = { status: "submitted", by: "sample", at: new Date().toISOString() };
+        submissions[q + "|" + o.id] = { status: "submitted", by: "sample", at: new Date().toISOString() };
       }));
 
-      await VG.store.loadSample({ schemes, reports, quarterly, submissions }, actor);
+      await VG.store.loadSample({ schemes, reports, submissions }, actor);
     },
   };
 })();

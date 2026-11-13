@@ -56,10 +56,26 @@
     officeOptions(selected, blank) {
       return this.options(VG.config.offices.map((o) => ({ value: o.id, label: o.name })), selected, blank);
     },
-    monthOptions(selected, id) {
-      return `<select id="${id || "month"}" aria-label="Month">${this.options(VG.logic.months().map((m) => ({ value: m, label: this.month(m) })), selected)}</select>`;
+    quarterOptions(selected, id) {
+      return `<select id="${id || "q"}" aria-label="Quarter">${this.options(VG.logic.quarters().map((q) => ({ value: q, label: VG.logic.qLabel(q) + " · " + VG.logic.qMonths(q) })), selected)}</select>`;
     },
-
+    // Q1..Q4 of the year as chips: ticked when submitted, ringed when chosen, greyed when still ahead.
+    quarterStrip(q, linkFor, submittedFor) {
+      const now = VG.logic.thisQuarter();
+      return `<div class="quarters">${VG.logic.fyQuarters(q).map((p) => {
+        const n = "Q" + p.slice(-1) + " " + VG.logic.qMonths(p).replace(/ \d{4}$/, "");
+        const done = submittedFor && submittedFor(p);
+        const cls = p === q ? "on" : done ? "done" : "";
+        return p > now || p < VG.logic.quarter(VG.config.startMonth) ? `<span class="future">${esc(n)}</span>`
+          : `<a class="${cls}" ${linkFor(p)}>${done ? "✓ " : ""}${esc(n)}</a>`;
+      }).join("")}</div>`;
+    },
+    // Intervention text cut for lists; full text goes in a tooltip.
+    ivShort(text, n) {
+      const t = String(text || "").split(/[.:]/)[0];
+      const max = n || 90;
+      return t.length > max ? t.slice(0, max - 2).trimEnd() + "…" : t;
+    },
     chip(text, kind) {
       const k = kind || "muted";
       return `<span class="chip chip-${k}"><i aria-hidden="true">${ICON[k] || ""}</i>${esc(text)}</span>`;

@@ -7,12 +7,13 @@
   // route -> [view name, roles allowed]
   const ROUTES = {
     "login": ["login", null],
-    "my": ["officerMonth", ["officer"]],
+    "my": ["officerQuarter", ["officer"]],
     "report": ["officerReport", ["officer"]],
     "overview": ["overview", ["viewer", "admin"]],
     "office": ["office", ["viewer", "admin"]],
     "kpis": ["kpis", ["viewer", "admin"]],
-    "step": ["stepDetail", ALL],
+    "iv": ["ivDetail", ALL],
+    "step": ["ivDetail", ALL],
     "status": ["adminStatus", ["admin"]],
     "steps": ["adminSteps", ["admin"]],
     "step-edit": ["adminStepEdit", ["admin"]],
@@ -32,12 +33,12 @@
     clock: '<path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>',
   };
   const NAV = {
-    officer: [["my", "My steps", "list"]],
+    officer: [["my", "My interventions", "list"]],
     viewer: [["overview", "Dashboard", "grid"], ["kpis", "KPIs", "target"]],
-    admin: [["overview", "Dashboard", "grid"], ["kpis", "KPIs", "target"], ["status", "Submissions", "check"], ["steps", "Steps", "steps"],
+    admin: [["overview", "Dashboard", "grid"], ["kpis", "KPIs", "target"], ["status", "Submissions", "check"], ["steps", "Interventions", "steps"],
       ["users", "Users", "users"], ["schemes", "Schemes", "rupee"], ["log", "Change log", "clock"]],
   };
-  const PARENT = { report: "my", office: "overview", step: null, "step-edit": "steps" };
+  const PARENT = { report: "my", office: "overview", iv: null, step: null, "step-edit": "steps" };
   const HOME = { officer: "my", viewer: "overview", admin: "overview" };
 
   let params = {};

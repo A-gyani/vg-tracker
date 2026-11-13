@@ -2,12 +2,14 @@
 // All methods return Promises so a Firebase version can replace this file without changing the screens.
 //
 // Records
-//   step        { id, ivNo, ivCode, ivDesc, title, office, type: "new"|"ongoing", active, kpis: [{ id, text, targets: {year: value} }] }
+//   step        { id, ivNo, ivCode, ivDesc, title, office, type, active,
+//                 kpis: [{ id, text, targets: {year: value}, basis, unit, collab?, actuals?: {year: value}, milestones? }] }
 //   user        { id, name, email, role: "officer"|"admin"|"viewer", office, active }
 //   scheme      { id, name, budgetHead, office, active }
-//   report      key "YYYY-MM|stepId"      { position, heldUp, nextBy, actuals: { kpiId: number }, by, at }
-//   quarterly   key "YYYY-YY Qn|stepId"   { schemeId, sanctioned, spent, by, at }
-//   submission  key "YYYY-MM|officeId"    { status: "submitted"|"reopened", by, at }
+//   report      key "2026-27 Q3|I29-SAG"  (quarter | intervention-office unit)
+//               { actuals: { "I29-S2.k1": number }, done: { kpiKey: [milestone labels] }, heldUp, moveBy,
+//                 schemeId, sanctioned, spent, by, at }
+//   submission  key "2026-27 Q3|SAG"      { status: "submitted"|"reopened", by, at }
 //   log entry   { at, by, action, target, field, from, to }
 (function () {
   const VG = window.VG;
@@ -54,8 +56,8 @@
     if (changes.length) addLog(actor, before ? action + " edited" : action + " added", after.id, changes);
     return after;
   }
-  function isLocked(month, office) {
-    const s = read("submissions", {})[month + "|" + office];
+  function isLocked(q, office) {
+    const s = read("submissions", {})[q + "|" + office];
     return !!s && s.status === "submitted";
   }
 
@@ -68,11 +70,10 @@
       const version = window.VG_SEED_VERSION || "";
       if (read("seeded", false)) {
         if (read("seedVersion", "") === version) return;
-        // A newer agreed step list: replace the old one. Old reports point at old step IDs, so they go too
+        // A newer step list or report format: replace the step list. Old reports no longer fit, so they go too
         // (test mode only: this is sample or trial data). Users are kept; sample schemes are removed.
         write("steps", (window.VG_SEED_STEPS || []).map((s) => Object.assign({}, s)));
         write("reports", {});
-        write("quarterly", {});
         write("submissions", {});
         if (read("sample", false)) write("schemes", read("schemes", []).filter((s) => !String(s.id).startsWith("sample-")));
         write("sample", false);
@@ -85,7 +86,6 @@
       write("users", VG.config.seedUsers.map((u) => Object.assign({ active: true }, u)));
       write("schemes", []);
       write("reports", {});
-      write("quarterly", {});
       write("submissions", {});
       write("log", []);
       write("seeded", true);
@@ -112,44 +112,31 @@
     async listSchemes() { return read("schemes", []); },
     async saveScheme(scheme, actor) { return upsert("schemes", scheme, actor, "Scheme", SCHEME_FIELDS, "sc"); },
 
-    // monthly reports
+    // quarterly reports, one per intervention-office unit
     async allReports() { return read("reports", {}); },
-    async saveReport(month, step, data, actor) {
-      if (isLocked(month, step.office)) throw new Error("This month is submitted.");
+    async saveReport(q, unit, data, actor) {
+      if (isLocked(q, unit.office)) throw new Error("This quarter is submitted.");
       const all = read("reports", {});
-      const key = month + "|" + step.id;
-      const after = { position: data.position, heldUp: data.heldUp, nextBy: data.nextBy || "", actuals: data.actuals || {}, by: actor.id, at: now() };
-      const changes = diff(all[key], after, ["position", "heldUp", "nextBy", "actuals"]);
+      const key = q + "|" + unit.id;
+      const F = ["actuals", "done", "heldUp", "moveBy", "schemeId", "sanctioned", "spent"];
+      const after = { actuals: data.actuals || {}, done: data.done || {}, heldUp: data.heldUp || VG.config.heldUpWith[0],
+        moveBy: data.moveBy || "", schemeId: data.schemeId || "", sanctioned: data.sanctioned ?? "", spent: data.spent ?? "", by: actor.id, at: now() };
+      const changes = diff(all[key], after, F);
       all[key] = after;
       write("reports", all);
       addLog(actor, "Report saved", key, changes);
       return after;
     },
 
-    // quarterly finance
-    async allQuarterly() { return read("quarterly", {}); },
-    async saveQuarterly(quarter, step, month, data, actor) {
-      if (isLocked(month, step.office)) throw new Error("This month is submitted.");
-      const all = read("quarterly", {});
-      const key = quarter + "|" + step.id;
-      const after = { schemeId: data.schemeId || "", sanctioned: data.sanctioned, spent: data.spent, by: actor.id, at: now() };
-      const changes = diff(all[key], after, ["schemeId", "sanctioned", "spent"]);
-      if (all[key] && !changes.length) return all[key];
-      all[key] = after;
-      write("quarterly", all);
-      addLog(actor, "Finance saved", key, changes);
-      return after;
-    },
-
-    // month submission
+    // quarter submission
     async allSubmissions() { return read("submissions", {}); },
-    async setSubmission(month, office, status, actor) {
+    async setSubmission(q, office, status, actor) {
       const all = read("submissions", {});
-      const key = month + "|" + office;
+      const key = q + "|" + office;
       const before = all[key] ? all[key].status : "";
       all[key] = { status, by: actor.id, at: now() };
       write("submissions", all);
-      addLog(actor, status === "submitted" ? "Month submitted" : "Month reopened", key, [{ field: "status", from: before, to: status }]);
+      addLog(actor, status === "submitted" ? "Quarter submitted" : "Quarter reopened", key, [{ field: "status", from: before, to: status }]);
       return all[key];
     },
 
@@ -160,7 +147,6 @@
     async loadSample(data, actor) {
       write("schemes", read("schemes", []).concat(data.schemes));
       write("reports", Object.assign(read("reports", {}), data.reports));
-      write("quarterly", Object.assign(read("quarterly", {}), data.quarterly));
       write("submissions", Object.assign(read("submissions", {}), data.submissions));
       write("sample", true);
       addLog(actor, "Sample data loaded", "all", [{ field: "reports", from: "", to: Object.keys(data.reports).length }]);
