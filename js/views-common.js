@@ -114,7 +114,8 @@
     let units = L.ivUnits(steps, no);
     if (user.role === "officer") units = units.filter((u) => u.office === user.office);
     if (!units.length) throw new Error("Intervention not found. Go back and choose one.");
-    const q = params.q || L.latestQuarterWithData(reports);
+    const per = params.q || L.latestQuarterWithData(reports);
+    const q = L.periodQ(per);
     const year = L.qYearKey(q);
     const first = units[0];
     const rows = units.flatMap((u) => L.kpiRows(u.kpis, reports, q));
@@ -124,7 +125,7 @@
     const nextMs = ms.flatMap((r) => r.milestones.filter((m) => m.state !== "done")).sort((a, b) => (a.due > b.due ? 1 : -1))[0];
     const offices = [...new Set(units.map((u) => u.office))];
     const officer = user.role === "officer";
-    const back = officer ? VG.ui.link("my", { q }) : offices.length === 1 ? VG.ui.link("office", { id: offices[0], q }) : VG.ui.link("overview", { q });
+    const back = officer ? VG.ui.link("my", { q }) : offices.length === 1 ? VG.ui.link("office", { id: offices[0], q: per }) : VG.ui.link("overview", { q: per });
     const backLabel = officer ? "My interventions" : offices.length === 1 ? VG.ui.officeShort(offices[0]) : "Dashboard";
     const end = L.qEndMonth(q);
     const dash = '<span class="muted">–</span>';
@@ -135,7 +136,7 @@
       return `<div class="kcard"><div class="meta"><h3>${esc(r.kpi.text)}</h3>${VG.ui.kpiChip(r.status)}</div>
         ${VG.ui.kpiTags(r.kpi)}${offices.length > 1 ? `<span class="office-line">${VG.ui.swatch(r.unit.office)}${esc(VG.ui.officeShort(r.unit.office))}</span>` : ""}
         ${VG.charts.kpiChart(r.kpi, year, qv)}
-        <div class="meta"><span class="muted">This year: <b>${r.actual != null ? VG.ui.fmtNum(r.actual) : "–"}</b> of ${esc(r.targetText || "–")} by end of Q${q.slice(-1)}</span>
+        <div class="meta"><span class="muted">${L.qFy(q)}: <b>${r.actual != null ? VG.ui.fmtNum(r.actual) : "–"}</b> of ${esc(r.targetText || "–")} ${L.periodKind(per) === "past" ? "for the year" : "by end of Q" + q.slice(-1)}</span>
           <span class="muted">Target 29-30: <b>${esc((r.kpi.targets || {})["2030"] || "–")}</b>${editLink(r)}</span></div></div>`;
     };
     const msCard = (r) => `<div class="kcard"><div class="meta"><h3>${esc(r.kpi.text)}</h3>${VG.ui.kpiChip(r.status === "none" ? "none" : r.status)}</div>
@@ -150,7 +151,7 @@
       <div class="head"><div class="ohead">${VG.logos.mark(offices.length === 1 ? offices[0] : "SECRETARY", 56)}<div>
         <span class="eyebrow">${esc(offices.map((o) => VG.ui.office(o)).join(" · "))} · Intervention ${first.ivNo} · ${esc(first.ivCode)}</span>
         <h1 class="step-title">${esc(first.ivDesc)}</h1></div></div>
-        ${VG.ui.quarterOptions(q)}</div>
+        ${user.role === "officer" ? VG.ui.quarterOptions(q) : VG.ui.periodOptions(per)}</div>
 
       <div class="tiles five">
         ${VG.ui.tile("KPIs", rows.length, `${num.length} number${num.length === 1 ? "" : "s"}${ms.length ? `, ${ms.length} milestone task${ms.length === 1 ? "" : "s"}` : ""}`)}

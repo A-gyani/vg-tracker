@@ -65,6 +65,24 @@
       const m = this.addMonths(this.qEndMonth(q), 1);
       return "15 " + MON[+m.slice(5) - 1] + " " + m.slice(0, 4);
     },
+    // ---- periods for the viewer screens: a quarter ("2026-27 Q3") or a whole year ("2026-27") ----
+    fyList() { const out = []; for (let y = 2022; y <= 2029; y++) out.push(y + "-" + pad((y + 1) % 100)); return out; },
+    isYear(p) { return /^\d{4}-\d\d$/.test(p || ""); },
+    // "quarter" | "ytd" (this year so far) | "past" (a finished year) | "future" (targets only)
+    periodKind(p) {
+      if (!this.isYear(p)) return "quarter";
+      const cur = this.qFy(this.thisQuarter());
+      return p === cur ? "ytd" : p < cur ? "past" : "future";
+    },
+    // The quarter whose figures the period shows: the latest quarter of this year, the last quarter of a past year.
+    periodQ(p) {
+      const k = this.periodKind(p);
+      return k === "quarter" ? p : k === "ytd" ? this.thisQuarter() : k === "past" ? p + " Q4" : p + " Q1";
+    },
+    periodLabel(p) {
+      const k = this.periodKind(p);
+      return k === "quarter" ? this.qLabel(p) : k === "ytd" ? p + " · year so far" : k === "past" ? p + " · full year" : p + " · targets";
+    },
     // Quarters of the same financial year, Q1..Q4.
     fyQuarters(q) { const f = this.qFy(q); return [1, 2, 3, 4].map((n) => f + " Q" + n); },
 
@@ -192,13 +210,14 @@
         const targetText = (k.targets || {})[year];
         const target = this.num(targetText);
         const actual = this.kpiActual(reports, item, q);
-        const status = this.kpiStatus(k, target, actual, end);
+        // a coming year has targets only
+        const status = this.qFy(q) > this.qFy(this.thisQuarter()) ? (target ? "future" : "none") : this.kpiStatus(k, target, actual, end);
         const pct = target && actual != null && !isNaN(actual) ? actual / target : null;
         return { item, kpi: k, step: item.step, unit: item.unit, targetText, target, actual, pct, status };
       });
     },
     count(rows) {
-      const c = { achieved: 0, ontrack: 0, behind: 0, unreported: 0, none: 0, total: rows.length };
+      const c = { achieved: 0, ontrack: 0, behind: 0, unreported: 0, none: 0, future: 0, total: rows.length };
       rows.forEach((r) => { c[r.status]++; });
       return c;
     },

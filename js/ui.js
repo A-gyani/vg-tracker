@@ -59,6 +59,18 @@
     quarterOptions(selected, id) {
       return `<select id="${id || "q"}" aria-label="Quarter">${this.options(VG.logic.quarters().map((q) => ({ value: q, label: VG.logic.qLabel(q) + " · " + VG.logic.qMonths(q) })), selected)}</select>`;
     },
+    // Viewer period: this year so far, its quarters, finished years, and coming years (targets only).
+    periodOptions(selected, id) {
+      const L = VG.logic;
+      const cur = L.qFy(L.thisQuarter());
+      const opt = (v, l) => `<option value="${esc(v)}"${v === selected ? " selected" : ""}>${esc(l)}</option>`;
+      const years = L.fyList();
+      return `<select id="${id || "q"}" aria-label="Period">
+        <optgroup label="This year">${opt(cur, cur + " · year so far")}${L.quarters().map((q) => opt(q, L.qLabel(q) + " · " + L.qMonths(q))).join("")}</optgroup>
+        <optgroup label="Past years">${years.filter((y) => y < cur).reverse().map((y) => opt(y, y + " · full year")).join("")}</optgroup>
+        <optgroup label="Coming years">${years.filter((y) => y > cur).map((y) => opt(y, y + " · targets")).join("")}</optgroup>
+      </select>`;
+    },
     // Q1..Q4 of the year as chips: ticked when submitted, ringed when chosen, greyed when still ahead.
     quarterStrip(q, linkFor, submittedFor) {
       const now = VG.logic.thisQuarter();
@@ -113,6 +125,7 @@
         behind: this.chip("Behind", "serious"),
         unreported: this.chip("Not reported", "muted"),
         none: this.chip("No target this year", "muted"),
+        future: this.chip("Target set", "accent"),
       }[status] || "";
     },
     // Progress toward target; the tick marks where the year should be by now.

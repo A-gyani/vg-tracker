@@ -32,7 +32,7 @@
   // 2. My interventions for a quarter
   VG.views.officerQuarter = async (el, params) => {
     const user = VG.auth.user();
-    const q = params.q || L().thisQuarter();
+    const q = params.q && !L().isYear(params.q) ? params.q : L().thisQuarter();
     const show = params.show || "all";
     const [units, reports, subs] = await Promise.all([myUnits(user.office), VG.store.allReports(), VG.store.allSubmissions()]);
     const { locked, sub } = lockState(subs, q, user.office);
