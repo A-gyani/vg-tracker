@@ -188,7 +188,7 @@
       </div>
 
       <div class="tiles five">
-        ${ftile("all", "KPIs with a numeric target", withTarget.length, "Show all")}
+        ${ftile("all", "KPIs with a target this year", withTarget.length, "Show all")}
         ${ftile("achieved", "Achieved", count("achieved"), VG.ui.chip(VG.ui.pct(count("achieved"), withTarget.length) + "%", "good"))}
         ${ftile("ontrack", "On track", count("ontrack"), "In step with the year so far")}
         ${ftile("behind", "Behind", count("behind"), count("behind") ? VG.ui.chip("Needs attention", "serious") : "", count("behind") ? "hot" : "")}
@@ -209,21 +209,21 @@
 
       <div class="filters">
         <select id="office" aria-label="Office">${VG.ui.officeOptions(office, "All offices")}</select>
-        <a class="small${show === "none" ? " on-link" : ""}" ${VG.ui.link("kpis", { m: month, office, show: "none" })}>Without a numeric target · ${count("none")}</a>
+        <a class="small${show === "none" ? " on-link" : ""}" ${VG.ui.link("kpis", { m: month, office, show: "none" })}>No target this year · ${count("none")}</a>
         <button type="button" class="secondary" id="export" style="margin-left:auto">Export</button>
       </div>
 
       <div class="card flush">
-        <div class="card-head"><h2>${{ all: "All KPIs", achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "Without a numeric target" }[show] || "KPIs"}${office ? " · " + esc(VG.ui.officeShort(office)) : ""}</h2>
+        <div class="card-head"><h2>${{ all: "All KPIs", achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "No target this year" }[show] || "KPIs"}${office ? " · " + esc(VG.ui.officeShort(office)) : ""}</h2>
           <span class="muted small">${list.length} KPIs, furthest behind first${list.some((r) => r.status === "behind") ? ' · <span class="worst-key"></span> the ' + KWORST + " furthest behind" : ""}</span></div>
         <div class="table-wrap"><table class="kpilist" id="klist">
         <colgroup><col style="width:84px"><col><col style="width:130px"><col style="width:130px"><col style="width:200px"></colgroup>
-        <thead><tr><th>Step</th><th>KPI</th><th>Office</th><th class="num">Actual / Target ${VG.logic.fyYear(month)}</th><th>Progress</th></tr></thead>
+        <thead><tr><th>Step</th><th>KPI</th><th>Office</th><th class="num">Actual / Target ${VG.logic.fyLabel(month).replace("FY ", "")}</th><th>Progress</th></tr></thead>
         <tbody>${list.map((r, i) => `<tr class="${isWorst(r) ? "worst" : ""}${i >= KTOP ? " more" : ""}"${i >= KTOP ? " hidden" : ""}>
           <td><a class="id" ${VG.ui.link("step", { id: r.step.id })}>${esc(r.step.id)}</a></td>
           <td class="kt">${esc(r.kpi.text)}<span class="sub" data-tip="${esc(r.step.title)}">${esc(short(r.step.title, 80))}</span></td>
           <td><span class="small" style="display:inline-flex;gap:6px;align-items:center">${VG.ui.swatch(r.step.office)}${esc(VG.ui.officeShort(r.step.office))}</span></td>
-          <td class="num"><b>${VG.ui.fmtNum(r.actual) || "–"}</b> <span class="muted">/ ${esc(r.targetText)}</span></td>
+          <td class="num"><b>${VG.ui.fmtNum(r.actual) || "–"}</b> <span class="muted">/ ${r.target != null ? VG.ui.fmtNum(r.target) : esc(r.targetText || "–")}</span></td>
           <td><div class="kprog">${VG.ui.kpiBar(r, month)}${VG.ui.kpiChip(r.status)}</div></td></tr>`).join("") || `<tr><td colspan="5" class="muted">No KPIs here.</td></tr>`}</tbody>
         </table></div>
         ${list.length > KTOP ? `<div class="more-row"><button type="button" class="secondary" id="klist-all">Show all ${list.length}</button></div>` : ""}
@@ -240,8 +240,8 @@
       all.textContent = open ? `Show first ${KTOP} only` : `Show all ${list.length}`;
     };
     el.querySelector("#export").onclick = () => {
-      const head = ["Month", "Step ID", "Office", "Step", "KPI", "Target " + VG.logic.fyYear(month), "Actual", "% of target", "Status"];
-      const label = { achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "No numeric target" };
+      const head = ["Month", "Step ID", "Office", "Step", "KPI", "Target " + VG.logic.fyLabel(month).replace("FY ", ""), "Actual", "% of target", "Status"];
+      const label = { achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "No target this year" };
       const out = rows.map((r) => [month, r.step.id, r.step.office, r.step.title, r.kpi.text, r.targetText, r.actual ?? "",
         r.pct == null ? "" : Math.round(r.pct * 100), label[r.status]]);
       const csv = [head, ...out].map((x) => x.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");

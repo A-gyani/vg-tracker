@@ -169,10 +169,13 @@
         </div>
 
         <div class="card">
-          <div class="card-head"><h2><span class="sec-no">2</span>KPIs · achieved so far in ${VG.logic.fyLabel(month)}</h2><span class="muted small">On the same basis as the target</span></div>
-          <div class="table-wrap"><table class="kpi-input"><thead><tr><th>KPI</th><th class="num">Target ${VG.logic.fyYear(month)}</th><th class="num">Achieved so far</th><th style="min-width:170px">Progress</th></tr></thead><tbody>
-          ${kpiRows.map((r) => `<tr><td>${esc(r.kpi.text)}</td><td class="num">${esc(r.targetText)}</td>
-            <td class="num"><input id="a_${esc(r.kpi.id)}" name="a_${esc(r.kpi.id)}" type="number" step="any" min="0" value="${r.actual ?? ""}" aria-label="Achieved so far"></td>
+          <div class="card-head"><h2><span class="sec-no">2</span>KPIs · ${VG.logic.fyLabel(month)}</h2><span class="muted small">Running total: the total so far, including earlier years. Yearly: this year's figure so far.</span></div>
+          <div class="table-wrap"><table class="kpi-input"><thead><tr><th>KPI</th><th class="num">Target ${VG.logic.fyLabel(month).replace("FY ", "")}</th><th class="num">Achieved</th><th style="min-width:170px">Progress</th></tr></thead><tbody>
+          ${kpiRows.map((r) => VG.logic.isMilestone(r.kpi)
+            ? `<tr><td>${esc(r.kpi.text)}${VG.ui.kpiTags(r.kpi)}</td><td colspan="3">${VG.ui.milestoneList(r.kpi)}<span class="muted small">Milestones are ticked in the quarterly form (coming soon).</span></td></tr>`
+            : `<tr><td>${esc(r.kpi.text)}${VG.ui.kpiTags(r.kpi)}</td><td class="num">${esc(r.targetText) || "–"}</td>
+            <td class="num"><input id="a_${esc(r.kpi.id)}" name="a_${esc(r.kpi.id)}" type="number" step="any" min="0" value="${r.actual ?? ""}"
+              aria-label="${r.kpi.basis === "cumulative" ? "Total so far" : "This year so far"}" placeholder="${r.kpi.basis === "cumulative" ? "Total so far" : "This year"}"></td>
             <td data-bar="${esc(r.kpi.id)}">${VG.ui.kpiBar(r, month)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No KPIs for this step.</td></tr>`}
           </tbody></table></div>
           <details><summary class="small muted" style="cursor:pointer">Targets for all years</summary>${VG.ui.kpiTable(step, null, month)}</details>
@@ -234,7 +237,7 @@
       inp.oninput = () => {
         const actual = inp.value === "" ? null : Number(inp.value);
         const row = Object.assign({}, r, { actual, pct: r.target && actual != null ? actual / r.target : null });
-        if (row.pct != null) row.status = row.pct >= 1 ? "achieved" : row.pct >= VG.logic.fyElapsed(month) * 0.9 ? "ontrack" : "behind";
+        row.status = VG.logic.kpiStatus(r.kpi, r.target, actual, month);
         el.querySelector(`[data-bar="${CSS.escape(r.kpi.id)}"]`).innerHTML = VG.ui.kpiBar(row, month);
       };
     });

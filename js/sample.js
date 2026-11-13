@@ -55,10 +55,14 @@
           if (idx === ladder.length - 1) { held = "Not held up"; }
           const actuals = {};
           (s.kpis || []).forEach((k) => {
-            const target = VG.logic.num((k.targets || {})[VG.logic.fyYear(m)]);
-            if (!target || pace[k.id] == null) return;
-            const v = target * Math.min(pace[k.id] * VG.logic.fyElapsed(m), 1.15);
-            actuals[k.id] = target >= 20 ? Math.round(v) : Math.round(v * 10) / 10;
+            const year = VG.logic.fyYear(m);
+            const target = VG.logic.num((k.targets || {})[year]);
+            if (!target || pace[k.id] == null || VG.logic.isMilestone(k)) return;
+            const share = Math.min(pace[k.id] * VG.logic.fyElapsed(m), 1.15);
+            // running totals start from last year's figure; yearly KPIs start from 0
+            const prev = k.basis === "cumulative" ? Math.min(target, VG.logic.num((k.targets || {})[String(Number(year) - 1)]) || 0) : 0;
+            const v = prev + (target - prev) * share;
+            actuals[k.id] = k.unit === "crore" ? Math.round(v * 100) / 100 : Math.round(v);
           });
           reports[m + "|" + s.id] = { position: ladder[idx], heldUp: held, nextBy: idx === ladder.length - 1 ? "" : nextBy, actuals, by: "sample", at: new Date().toISOString() };
         });

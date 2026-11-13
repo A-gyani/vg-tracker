@@ -24,7 +24,12 @@ VG.config = {
   startMonth: "2026-04",
 
   // Financial-year columns used for targets.
-  targetYears: ["2025", "2026", "2027", "2028", "2029", "2030"],
+  // Booklet year keys: "2025" = FY 2024-25 ... "2030" = FY 2029-30. Earlier years hold past targets and achieved figures.
+  targetYears: ["2022", "2023", "2024", "2025", "2026", "2027", "2028", "2029", "2030"],
+
+  // How each KPI is counted, and its unit (set per KPI in the step list).
+  kpiBasis: { cumulative: "Running total", yearly: "Yearly", "one-time": "One-time task" },
+  kpiUnits: { number: "Number", lakh: "Lakh", crore: "₹ crore", milestones: "Milestones" },
 
   offices: [
     { id: "CYSCA", short: "CYSCA", name: "Commissioner, Youth Services & Cultural Activities" },

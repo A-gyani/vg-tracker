@@ -65,14 +65,22 @@
 
   VG.store = {
     async init() {
+      const version = window.VG_SEED_VERSION || "";
       if (read("seeded", false)) {
-        // older test data: give every KPI a stable id
-        const steps = read("steps", []);
-        let changed = false;
-        steps.forEach((st) => (st.kpis || []).forEach((k, i) => { if (!k.id) { k.id = "k" + (i + 1); changed = true; } }));
-        if (changed) write("steps", steps);
+        if (read("seedVersion", "") === version) return;
+        // A newer agreed step list: replace the old one. Old reports point at old step IDs, so they go too
+        // (test mode only: this is sample or trial data). Users are kept; sample schemes are removed.
+        write("steps", (window.VG_SEED_STEPS || []).map((s) => Object.assign({}, s)));
+        write("reports", {});
+        write("quarterly", {});
+        write("submissions", {});
+        if (read("sample", false)) write("schemes", read("schemes", []).filter((s) => !String(s.id).startsWith("sample-")));
+        write("sample", false);
+        write("seedVersion", version);
+        addLog({ id: "system" }, "Step list updated", "all", [{ field: "version", from: "", to: version }]);
         return;
       }
+      write("seedVersion", version);
       write("steps", (window.VG_SEED_STEPS || []).map((s) => Object.assign({}, s)));
       write("users", VG.config.seedUsers.map((u) => Object.assign({ active: true }, u)));
       write("schemes", []);

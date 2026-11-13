@@ -118,23 +118,36 @@
       const r = this.latest(reports, stepId, month);
       return r && r.period >= this.fyStart(month) ? r.actuals || {} : {};
     },
+    // Booklet year key -> short financial-year label ("2025" -> "24-25").
+    fyKeyLabel(y) { return String(Number(y) - 1).slice(2) + "-" + String(y).slice(2); },
+    isMilestone(k) { return k.unit === "milestones"; },
+    // Where a KPI should be by the end of `month`: yearly KPIs move from 0 to the year's target;
+    // running totals move from last year's target to this year's.
+    kpiExpected(k, target, month) {
+      const elapsed = this.fyElapsed(month);
+      if (k.basis !== "cumulative") return target * elapsed;
+      const prev = this.num((k.targets || {})[String(Number(this.fyYear(month)) - 1)]) || 0;
+      return prev >= target ? target : prev + (target - prev) * elapsed;
+    },
+    kpiStatus(k, target, actual, month) {
+      if (this.isMilestone(k) || !target) return "none";
+      if (actual == null || isNaN(actual)) return "unreported";
+      if (actual >= target) return "achieved";
+      return actual >= this.kpiExpected(k, target, month) * 0.9 ? "ontrack" : "behind";
+    },
     // One row per KPI: target for the year, actual so far, % and status.
+    // Actual: this year's saved report; else the achieved figure recorded for that year in the step list.
     kpiRows(step, reports, month) {
       const year = this.fyYear(month);
       const acts = this.actualsFor(reports, step.id, month);
-      const elapsed = this.fyElapsed(month);
       return (step.kpis || []).map((k) => {
         const targetText = (k.targets || {})[year];
-        const target = this.num(targetText);
-        const actualRaw = acts[k.id];
+        const target = this.isMilestone(k) ? null : this.num(targetText);
+        let actualRaw = acts[k.id];
+        if ((actualRaw === "" || actualRaw == null) && k.actuals) actualRaw = k.actuals[year];
         const actual = actualRaw === "" || actualRaw == null ? null : Number(actualRaw);
-        let status, pct = null;
-        if (!target) status = "none";
-        else if (actual == null || isNaN(actual)) status = "unreported";
-        else {
-          pct = actual / target;
-          status = pct >= 1 ? "achieved" : pct >= elapsed * 0.9 ? "ontrack" : "behind";
-        }
+        const status = this.kpiStatus(k, target, actual, month);
+        const pct = target && actual != null && !isNaN(actual) ? actual / target : null;
         return { kpi: k, step, targetText, target, actual, pct, status };
       });
     },

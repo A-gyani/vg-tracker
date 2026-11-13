@@ -96,7 +96,7 @@
         ontrack: this.chip("On track", "accent"),
         behind: this.chip("Behind", "serious"),
         unreported: this.chip("Not reported", "muted"),
-        none: this.chip("No numeric target", "muted"),
+        none: this.chip("No target this year", "muted"),
       }[status] || "";
     },
     // Progress toward target; the tick marks where the year should be by now.
@@ -104,7 +104,7 @@
       if (row.pct == null) return "";
       const w = Math.min(100, row.pct * 100);
       const color = row.status === "achieved" ? "var(--good)" : row.status === "behind" ? "var(--serious)" : "var(--ontrack, var(--accent))";
-      const expect = Math.min(100, VG.logic.fyElapsed(month) * 100);
+      const expect = Math.min(100, row.target ? (VG.logic.kpiExpected(row.kpi, row.target, month) / row.target) * 100 : VG.logic.fyElapsed(month) * 100);
       return `<div class="kbar" data-tip="${esc(`${Math.round(row.pct * 100)}% of the year's target\nExpected by now: about ${Math.round(expect)}%`)}">
         <div class="kbar-track"><span style="width:${w}%;background:${color}"></span><i style="left:${expect}%"></i></div>
         <b class="num">${Math.round(row.pct * 100)}%</b></div>`;
@@ -115,16 +115,34 @@
       return isNaN(n) ? esc(v) : n.toLocaleString("en-IN");
     },
     // Targets by year; with `rows` (from logic.kpiRows) also actual, progress and status for the year.
+    // Small grey line under a KPI: how it is counted, its unit and any collaborating department.
+    kpiTags(k) {
+      const parts = [VG.config.kpiBasis[k.basis] || ""];
+      if (k.unit && k.unit !== "number" && k.unit !== "milestones") parts.push("in " + VG.config.kpiUnits[k.unit]);
+      if (k.collab) parts.push("with " + k.collab);
+      return `<small class="ktag">${esc(parts.filter(Boolean).join(" · "))}</small>`;
+    },
+    // Milestones of a one-time KPI, with the quarter or year each is due.
+    milestoneList(k) {
+      return `<ul class="mlist">${(k.milestones || []).map((m) => `<li><span>${esc(m.label)}</span><b>${esc(m.due)}</b></li>`).join("")}</ul>`;
+    },
     kpiTable(step, rows, month) {
-      const years = VG.config.targetYears;
       const now = VG.logic.fyYear(month || VG.logic.thisMonth());
       const extra = !!rows;
+      // only the years any KPI of this step has a target or figure for
+      const years = VG.config.targetYears.filter((y) => (step.kpis || []).some((k) =>
+        ((k.targets || {})[y] ?? "") !== "" || (k.actuals || {})[y] != null));
+      const cell = (k, y) => {
+        const t = (k.targets || {})[y];
+        const a = (k.actuals || {})[y];
+        return `${esc(t)}${a != null ? `<small class="ach" data-tip="Achieved in ${VG.logic.fyKeyLabel(y)}">✓ ${this.fmtNum(a)}</small>` : ""}`;
+      };
       return `<div class="table-wrap"><table class="kpis${extra ? " actuals" : ""}"><thead><tr><th>KPI</th>${years.map((y) =>
-        `<th class="${y === now ? "now" : ""}"${y === now ? ' data-tip="Target for the current financial year"' : ""}>${y}</th>`).join("")}
+        `<th class="${y === now ? "now" : ""}"${y === now ? ' data-tip="Target for the current financial year"' : ""}>${VG.logic.fyKeyLabel(y)}</th>`).join("")}
         ${extra ? `<th>Actual</th><th style="min-width:150px">Progress</th><th></th>` : ""}</tr></thead><tbody>
-        ${(step.kpis || []).map((k, i) => `<tr><td>${esc(k.text)}</td>${years.map((y) =>
-          `<td class="${y === now ? "now" : ""}">${esc((k.targets || {})[y])}</td>`).join("")}
-          ${extra ? `<td><b>${this.fmtNum(rows[i].actual)}</b></td><td>${this.kpiBar(rows[i], month)}</td><td>${this.kpiChip(rows[i].status)}</td>` : ""}</tr>`).join("")}
+        ${(step.kpis || []).map((k, i) => `<tr><td>${esc(k.text)}${this.kpiTags(k)}${VG.logic.isMilestone(k) ? this.milestoneList(k) : ""}</td>${years.map((y) =>
+          `<td class="${y === now ? "now" : ""}">${cell(k, y)}</td>`).join("")}
+          ${extra ? `<td><b>${this.fmtNum(rows[i].actual)}</b></td><td>${this.kpiBar(rows[i], month)}</td><td>${VG.logic.isMilestone(k) ? this.chip("Milestones", "muted") : this.kpiChip(rows[i].status)}</td>` : ""}</tr>`).join("")}
       </tbody></table></div>`;
     },
     formData(form) {

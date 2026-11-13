@@ -114,11 +114,18 @@
     const existing = params.id ? await VG.store.getStep(params.id) : null;
     const s = existing || { id: "", ivNo: "", ivCode: "", title: "", office: "", type: "ongoing", active: true, kpis: [] };
     const years = VG.config.targetYears;
+    const opts = (map, v) => VG.ui.options(Object.entries(map).map(([value, label]) => ({ value, label })), v);
     const kpiRow = (k) => `<div class="kpi-block">
         <input type="hidden" name="kpiId" value="${esc(k.id || "")}">
         <label>KPI <textarea name="kpiText" rows="2">${esc(k.text)}</textarea></label>
+        <div class="row">
+          <label>Counted as <select name="kpiBasis">${opts(VG.config.kpiBasis, k.basis || "cumulative")}</select></label>
+          <label>Unit <select name="kpiUnit">${opts(VG.config.kpiUnits, k.unit || "number")}</select></label>
+          <label>Collaborating department <input name="kpiCollab" value="${esc(k.collab || "")}"></label>
+        </div>
         <div class="kpi-targets"><span class="muted small">Targets</span>
-          ${years.map((y) => `<label>${y} <input name="t${y}" value="${esc((k.targets || {})[y])}"></label>`).join("")}</div>
+          ${years.map((y) => `<label>${VG.logic.fyKeyLabel(y)} <input name="t${y}" value="${esc((k.targets || {})[y])}"></label>`).join("")}</div>
+        ${(k.milestones || []).length ? `<div class="small muted">Milestones (kept as they are): ${VG.ui.milestoneList(k)}</div>` : ""}
       </div>`;
 
     el.innerHTML = `<div class="page">
@@ -155,8 +162,15 @@
       const kpis = [...el.querySelectorAll("#kpis .kpi-block")].map((tr) => {
         const text = tr.querySelector('[name="kpiText"]').value.trim();
         const targets = {};
-        years.forEach((y) => { targets[y] = tr.querySelector(`[name="t${y}"]`).value.trim(); });
-        return { id: tr.querySelector('[name="kpiId"]').value || "k" + (++maxId), text, targets };
+        years.forEach((y) => { const v = tr.querySelector(`[name="t${y}"]`).value.trim(); if (v) targets[y] = v; });
+        const id = tr.querySelector('[name="kpiId"]').value || "k" + (++maxId);
+        const old = (s.kpis || []).find((x) => x.id === id) || {};
+        // keep past achieved figures and milestones, which this form does not edit
+        const k = Object.assign({}, old, { id, text, targets,
+          basis: tr.querySelector('[name="kpiBasis"]').value, unit: tr.querySelector('[name="kpiUnit"]').value });
+        const collab = tr.querySelector('[name="kpiCollab"]').value.trim();
+        if (collab) k.collab = collab; else delete k.collab;
+        return k;
       }).filter((k) => k.text);
       await VG.store.saveStep({
         id: d.id, ivNo: d.ivNo === "" ? "" : Number(d.ivNo), ivCode: d.ivCode, title: d.title,
