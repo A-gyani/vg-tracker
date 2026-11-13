@@ -97,7 +97,7 @@
         ${kind === "past" ? VG.ui.tile("KPIs with a target", T.kpi.total - T.kpi.none, "recorded yearly figures") : `<div class="tile ring-tile">${C().ring(T.units ? T.reported / T.units : 0, 54)}
           <div style="display:flex;flex-direction:column;gap:2px"><span class="label">Intervention reports saved</span><b class="num">${T.reported} of ${T.units}</b>
           <span class="sub">${submitted} of ${a.offices.length} offices submitted${kind === "ytd" ? " · " + L().qLabel(q) : ""}</span></div></div>`}
-        ${VG.ui.tile("KPIs achieved or on track", `${T.kpi.achieved + T.kpi.ontrack}<small>of ${withTarget}</small>`, "with something due this year", "", "", VG.ui.link("kpis", { q: p, show: "all" }))}
+        ${VG.ui.tile("KPIs achieved or on track", `${T.kpi.achieved + T.kpi.ontrack}<small>of ${withTarget}</small>`, "with something due this year", "", "", VG.ui.link("kpis", { q: p, show: "good" }))}
         ${VG.ui.tile("KPIs behind", T.kpi.behind, T.kpi.behind ? "Needs attention" : "", "", T.kpi.behind ? "hot" : "", VG.ui.link("kpis", { q: p, show: "behind" }))}
         ${VG.ui.tile("Milestones overdue", T.msOverdue, T.msOverdue ? VG.ui.chip("Follow up", "crit") : "None", "", "", VG.ui.link("kpis", { q: p, show: "behind" }))}
         ${VG.ui.tile("Funds spent", T.sanctioned ? VG.ui.pct(T.spent, T.sanctioned) : 0, `${VG.ui.lakh(T.spent)} of ${VG.ui.lakh(T.sanctioned)}`, "%")}
@@ -178,7 +178,7 @@
     const withTarget = rows.filter((r) => r.status !== "none");
     const count = (st) => rows.filter((r) => r.status === st).length;
     const order = (r) => (r.status === "behind" ? -1 : 0) + (r.pct ?? 9);
-    const list = rows.filter((r) => show === "all" ? r.status !== "none" : r.status === show)
+    const list = rows.filter((r) => show === "all" ? r.status !== "none" : show === "good" ? r.status === "achieved" || r.status === "ontrack" : r.status === show)
       .sort((x, y) => future ? (x.unit.ivNo - y.unit.ivNo) : order(x) - order(y));
     let worstLeft = KWORST;
     const isWorst = (r) => r.status === "behind" && worstLeft-- > 0;
@@ -187,7 +187,7 @@
     const year = L().qYearKey(q);
     const go = (extra) => VG.ui.link("kpis", Object.assign({ q: p, office, show, view }, extra));
     const ftile = (key, label, value, sub, cls) =>
-      `<a class="tile ftile${show === key ? " on" : ""}${cls ? " " + cls : ""}" ${go({ show: key, view: "list" })}
+      `<a class="tile ftile${show === key || (show === "good" && (key === "achieved" || key === "ontrack")) ? " on" : ""}${cls ? " " + cls : ""}" ${go({ show: key, view: "list" })}
          aria-pressed="${show === key}"><span class="label">${esc(label)}</span><span class="value num">${value}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</a>`;
     const dash = '<span class="muted">–</span>';
 
@@ -319,7 +319,7 @@
         <button type="button" class="secondary" id="export" style="margin-left:auto">Export</button>
       </div>
       <div class="card flush">
-        <div class="card-head"><h2>${view === "years" ? "All KPIs, every year" : future ? "Targets" : ({ all: "All KPIs", achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "Nothing due this year" }[show] || "KPIs")}${office ? " · " + esc(VG.ui.officeShort(office)) : ""}</h2>
+        <div class="card-head"><h2>${view === "years" ? "All KPIs, every year" : future ? "Targets" : ({ all: "All KPIs", achieved: "Achieved", ontrack: "On track", behind: "Behind", unreported: "Not reported", none: "Nothing due this year", good: "Achieved or on track" }[show] || "KPIs")}${office ? " · " + esc(VG.ui.officeShort(office)) : ""}</h2>
           <span class="muted small">${caption}</span></div>
         <div class="table-wrap">${table}</div>
         ${list.length > KTOP ? `<div class="more-row"><button type="button" class="secondary" id="klist-all">Show all ${list.length}</button></div>` : ""}
@@ -387,7 +387,7 @@
       ${periodNote(kind, q)}
       <div class="tiles five">
         ${VG.ui.tile("Reported", `${o.reported}<small>of ${o.units}</small>`, o.submitted ? VG.ui.chip("Submitted", "good") : VG.ui.chip("Not submitted", "muted"))}
-        ${VG.ui.tile("KPIs achieved or on track", `${o.kpi.achieved + o.kpi.ontrack}<small>of ${o.kpi.total - o.kpi.none}</small>`, "", "", "", VG.ui.link("kpis", { q: p, office, show: "all" }))}
+        ${VG.ui.tile("KPIs achieved or on track", `${o.kpi.achieved + o.kpi.ontrack}<small>of ${o.kpi.total - o.kpi.none}</small>`, "", "", "", VG.ui.link("kpis", { q: p, office, show: "good" }))}
         ${VG.ui.tile("KPIs behind", o.kpi.behind, "", "", o.kpi.behind ? "hot" : "", VG.ui.link("kpis", { q: p, office, show: "behind" }))}
         ${VG.ui.tile("Held up", o.held, o.msOverdue ? VG.ui.chip(o.msOverdue + " milestones overdue", "crit") : "")}
         ${VG.ui.tile("Funds spent", o.sanctioned ? VG.ui.pct(o.spent, o.sanctioned) : 0, `${VG.ui.lakh(o.spent)} of ${VG.ui.lakh(o.sanctioned)}`, "%")}
